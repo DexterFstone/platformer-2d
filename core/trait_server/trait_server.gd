@@ -23,19 +23,16 @@ static func add_trait(target: Object, new_trait: BaseTrait) -> void:
 	add_trait_id(target.get_instance_id(), new_trait)
 
 
-static func add_trait_id(target: int, new_trait: BaseTrait) -> void:
-	if _traits.has(target):
-		var host := _traits[target]
+static func add_trait_id(id: int, new_trait: BaseTrait) -> void:
+	if _traits.has(id):
+		var host := _traits[id]
 		if host.has_trait(new_trait):
 			return
 
 		host.add_trait(new_trait)
 	else:
-		var instance := instance_from_id(target)
-		_traits.set(
-			target,
-			TraitHost.from_trait(instance, new_trait),
-		)
+		var instance := instance_from_id(id)
+		_traits.set(id, TraitHost.from_trait(instance, new_trait))
 		if instance is Node:
 			var node_target := instance as Node
 			node_target.tree_exiting.connect(
@@ -48,9 +45,9 @@ static func get_host(target: Object) -> TraitHost:
 	return get_host_id(target.get_instance_id())
 
 
-static func get_host_id(target: int) -> TraitHost:
-	if _traits.has(target):
-		return _traits[target]
+static func get_host_id(id: int) -> TraitHost:
+	if _traits.has(id):
+		return _traits[id]
 
 	return null
 
@@ -59,32 +56,46 @@ static func has_host(target: Object) -> bool:
 	return has_host_id(target.get_instance_id())
 
 
-static func has_host_id(target: int) -> bool:
-	return _traits.has(target)
+static func has_host_id(id: int) -> bool:
+	return _traits.has(id)
 
 
 static func remove_trait(target: Object, pre_trait: BaseTrait) -> void:
 	remove_trait_id(target.get_instance_id(), pre_trait)
 
 
-static func remove_trait_id(target: int, pre_trait: BaseTrait) -> void:
-	if _traits.has(target):
-		var host := _traits[target]
+static func remove_trait_id(id: int, pre_trait: BaseTrait) -> void:
+	if _traits.has(id):
+		var host := _traits[id]
 		if not host.has_trait(pre_trait):
 			return
 
 		host.remove_trait(pre_trait)
 		if host.is_empty():
-			_traits.erase(target)
+			_traits.erase(id)
 
 
 static func remove_host(target: Object) -> void:
 	remove_host_id(target.get_instance_id())
 
 
-static func remove_host_id(target: int) -> void:
-	if _traits.has(target):
-		_traits.erase(target)
+static func remove_host_id(id: int) -> void:
+	if _traits.has(id):
+		_traits.erase(id)
+
+
+static func deal_damage(target: Object, value: float) -> void:
+	deal_damage_id(target.get_instance_id(), value)
+
+
+static func deal_damage_id(id: int, value: float) -> void:
+	if _traits.has(id):
+		var host := _traits[id]
+		if not host.has_trait_type(Health):
+			return
+
+		var health: Health = host.traits.get(Health)
+		health.amount -= value
 
 
 static func _get_tree() -> SceneTree:
@@ -212,13 +223,54 @@ class TraitHost:
 		return _owner.get_ref()
 
 
+class Health extends BaseTrait:
+	var object: Node:
+		get = _get_owner
+	var amount: float:
+		set = set_amount
+	var min_amount: float
+	var max_amount: float
+	var regeneration_per_seconds: float
+
+
+	func _init(
+			new_owner: Object = null,
+			new_amount: float = 0,
+			new_min_amount: float = 0,
+			new_max_amount: float = 0,
+			new_regeneration_per_seconds: float = 0,
+	) -> void:
+		super(new_owner)
+		amount = new_amount
+		min_amount = new_min_amount
+		max_amount = new_max_amount
+		regeneration_per_seconds = new_regeneration_per_seconds
+
+
+	func _notification(what: int) -> void:
+		match what:
+			NOTIFICATION_PHYSICS_PROCESS:
+				if regeneration_per_seconds:
+					var delta := object.get_physics_process_delta_time()
+					var per_delta := regeneration_per_seconds * delta
+					amount = amount + per_delta
+
+
+	func _get_owner() -> Node:
+		return super()
+
+
+	func set_amount(value: float) -> void:
+		amount = clampf(value, min_amount, max_amount)
+
+
 @abstract class CharacterBodyTrait extends BaseTrait:
 	var object: CharacterBody2D:
 		get = _get_owner
 
 
 	func _get_owner() -> CharacterBody2D:
-		return _owner.get_ref()
+		return super()
 
 
 class Movement extends CharacterBodyTrait:
